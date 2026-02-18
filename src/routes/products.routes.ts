@@ -32,17 +32,29 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
     const user = (req as any).user;
     try {
-        await prisma.product.updateMany({ where: { id: req.params.id, storeId: user.storeId }, data: req.body });
-        return res.json({ ok: true });
-    } catch (e) { return res.status(500).json({ error: "Erro editar." }); }
+        const product = await prisma.product.update({ 
+            where: { id: req.params.id },
+            data: { ...req.body }
+        });
+        // Valida que o produto pertence à loja do usuário
+        if (product.storeId !== user.storeId) {
+            return res.status(403).json({ error: "Acesso negado." });
+        }
+        return res.json(product);
+    } catch (e) { return res.status(500).json({ error: "Erro ao editar produto." }); }
 });
 
 router.delete('/:id', async (req, res) => {
     const user = (req as any).user;
     try {
-        await prisma.product.deleteMany({ where: { id: req.params.id, storeId: user.storeId } });
-        return res.sendStatus(204);
-    } catch (e) { return res.status(500).json({ error: "Erro deletar." }); }
+        const product = await prisma.product.findUnique({ where: { id: req.params.id } });
+        if (!product) return res.status(404).json({ error: "Produto não encontrado." });
+        if (product.storeId !== user.storeId) {
+            return res.status(403).json({ error: "Acesso negado." });
+        }
+        await prisma.product.delete({ where: { id: req.params.id } });
+        return res.json({ ok: true });
+    } catch (e) { return res.status(500).json({ error: "Erro ao deletar produto." }); }
 });
 
 // Movimentação de Estoque

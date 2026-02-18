@@ -96,13 +96,13 @@ router.post('/verify', async (req, res) => {
 router.get('/verify', async (req, res) => {
     const { token } = req.query;
     if (!token || typeof token !== 'string') {
-        return res.status(400).send("Link inválido.");
+        return res.status(400).json({ error: "Link inválido." });
     }
 
     try {
         const user = await prisma.user.findFirst({ where: { verificationToken: token } });
         if (!user) {
-            return res.status(400).send("Link expirado. Use a opção 'Reenviar código'.");
+            return res.status(400).json({ error: "Link expirado. Use a opção 'Reenviar código'." });
         }
 
         await prisma.user.update({ where: { id: user.id }, data: { isVerified: true, verificationToken: null } });
@@ -110,7 +110,7 @@ router.get('/verify', async (req, res) => {
         return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?verified=true`);
     } catch (error) {
         console.error('GET Verify error:', error);
-        return res.status(500).send("Erro ao validar.");
+        return res.status(500).json({ error: "Erro ao validar." });
     }
 });
 

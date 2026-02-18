@@ -67,16 +67,20 @@ app.use(cors({
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos
     max: 100, // Limita 100 requisições por IP
-    message: 'Muitas requisições, tente novamente mais tarde',
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    handler: (req, res) => {
+        return res.status(429).json({ error: 'Muitas requisições, tente novamente mais tarde' });
+    }
 });
 
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 5, // Apenas 5 tentativas de login
-    message: 'Muitas tentativas de login, tente novamente em 15 minutos',
-    skipSuccessfulRequests: true
+    skipSuccessfulRequests: true,
+    handler: (req, res) => {
+        return res.status(429).json({ error: 'Muitas tentativas de login, tente novamente em 15 minutos' });
+    }
 });
 
 app.use(express.json({ limit: '10mb' })); // Reduzido de 50mb para 10mb

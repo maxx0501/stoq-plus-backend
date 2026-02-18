@@ -27,7 +27,7 @@ const PORT = process.env.PORT || 3333;
 const server = app.listen(PORT, () => console.log(`🚀 Server rodando na porta ${PORT}`));
 const prisma = new PrismaClient();
 
-// ===== MIDDLEWARE DE SEGURANÇA =====
+// ===== MIDDLEWARE DE SEGURANÇAaa =====
 
 // 1. Helmet - Adiciona headers de segurança
 app.use(helmet({

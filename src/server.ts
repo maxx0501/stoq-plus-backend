@@ -24,8 +24,11 @@ import adminRoutes from './routes/admin.routes';
 
 const app = express();
 const PORT = process.env.PORT || 3333;
-const server = app.listen(PORT, () => console.log(`🚀 Server rodando na porta ${PORT}`));
 const prisma = new PrismaClient();
+
+// ===== CONFIGURAÇÃO ANTES DE MIDDLEWARE =====
+// IMPORTANTE: Deve ser ANTES do rate limiter!
+app.set('trust proxy', 1);
 
 // ===== MIDDLEWARE DE SEGURANÇAaa =====
 
@@ -62,6 +65,8 @@ app.use(cors({
     credentials: true,
     optionsSuccessStatus: 200
 }));
+
+const server = app.listen(PORT, () => console.log(`🚀 Server rodando na porta ${PORT}`));
 
 // 3. Rate Limiting - Proteção contra força bruta
 const limiter = rateLimit({

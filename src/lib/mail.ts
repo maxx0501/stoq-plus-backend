@@ -14,7 +14,8 @@ class MailService {
     }
 
     async sendVerificationEmail(to: string, token: string) {
-        const verificationLink = `http://localhost:3333/auth/verify?token=${token}`;
+        const backendUrl = process.env.BACKEND_URL || process.env.API_URL || 'http://localhost:3333';
+        const verificationLink = `${backendUrl}/auth/verify?token=${token}`;
 
         try {
             console.log(`📤 Conectando ao Gmail para enviar e-mail para: ${to}...`);

@@ -32,16 +32,24 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
     const user = (req as any).user;
     try {
+        // Valida QUE O PRODUTO PERTENCE À LOJA ANTES DE ATUALIZAR
+        const existingProduct = await prisma.product.findUnique({ where: { id: req.params.id } });
+        if (!existingProduct) {
+            return res.status(404).json({ error: "Produto não encontrado." });
+        }
+        if (existingProduct.storeId !== user.storeId) {
+            return res.status(403).json({ error: "Acesso negado." });
+        }
+        
         const product = await prisma.product.update({ 
             where: { id: req.params.id },
             data: { ...req.body }
         });
-        // Valida que o produto pertence à loja do usuário
-        if (product.storeId !== user.storeId) {
-            return res.status(403).json({ error: "Acesso negado." });
-        }
         return res.json(product);
-    } catch (e) { return res.status(500).json({ error: "Erro ao editar produto." }); }
+    } catch (e) { 
+        console.error('Erro ao editar produto:', e);
+        return res.status(500).json({ error: "Erro ao editar produto." }); 
+    }
 });
 
 router.delete('/:id', async (req, res) => {

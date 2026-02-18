@@ -1,0 +1,241 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- USUÁRIOS E LOJA ---
+
+model User {
+  id            String    @id @default(uuid())
+  name          String
+  email         String    @unique
+  passwordHash  String
+  avatarUrl     String?
+  isSuperAdmin  Boolean   @default(false)
+  
+  
+  // --- SEGURANÇA ---
+  isVerified        Boolean   @default(false) 
+  verificationToken String?   
+  mustChangePassword Boolean @default(false)
+
+  createdAt     DateTime  @default(now())
+  
+  memberships   StoreUser[]
+  sales         Sale[]
+  stockEntries  StockEntry[]
+}
+
+model Store {
+  id        String    @id @default(uuid())
+  name      String
+  // Removi telefone e endereço pois você disse que não vai usar agora.
+  // Se precisar no futuro, é só adicionar.
+  
+  plan      StorePlan @default(FREE)
+  createdAt DateTime  @default(now())
+  
+  subscriptionExpiresAt DateTime? 
+
+  // Relações
+  memberships   StoreUser[]
+  products      Product[]
+  sales         Sale[]
+  stockEntries  StockEntry[]
+  customers     Customer[]
+  cashFlows     CashFlow[]
+  expenses      Expense[]      
+}
+
+
+
+model StoreUser {
+  id                String  @id @default(uuid())
+  role              Role
+  userId            String
+  storeId           String
+  
+  canSell           Boolean @default(false)
+  canManageProducts Boolean @default(false)
+
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store             Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, storeId])
+}
+
+// --- PRODUTOS E ESTOQUE ---
+
+model Product {
+  id            String    @id @default(uuid())
+  storeId       String
+  
+  name          String
+  description   String?
+  category      String?
+  imageUrl      String?
+  
+  price         Decimal
+  costPrice     Decimal?
+  
+  stock         Int
+  minStock      Int       @default(5)
+  isVisible     Boolean   @default(true)
+  
+  store         Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  saleItems     SaleItem[]     
+  stockEntries  StockEntry[]   
+}
+
+model StockEntry {
+  id            String   @id @default(uuid())
+  storeId       String
+  productId     String
+  userId        String?
+
+  entryType     String   @default("ENTRY") // ENTRY, LOSS
+  reason        String?  
+  
+  quantity      Int
+  oldStock      Int
+  newStock      Int
+  costPrice     Decimal?
+  createdAt     DateTime @default(now())
+  
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user          User?    @relation(fields: [userId], references: [id])
+}
+
+// --- VENDAS E CLIENTES ---
+
+model Customer {
+  id            String   @id @default(uuid())
+  storeId       String
+  
+  name          String
+  email         String?
+  phone         String?
+  cpf           String?
+  address       String?
+  createdAt     DateTime @default(now())
+
+  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sales         Sale[]
+}
+
+model Sale {
+  id              String    @id @default(uuid())
+  storeId         String
+  userId          String?   
+  customerId      String?
+
+  total           Decimal
+  createdAt       DateTime @default(now())
+  
+  // Dados Financeiros
+  paymentMethod   PaymentMethod @default(MONEY) 
+  status          PaymentStatus @default(PAID)     
+  dueDate         DateTime?                        
+  
+  items           SaleItem[]
+  
+  store           Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user            User?     @relation(fields: [userId], references: [id])
+  customer        Customer? @relation(fields: [customerId], references: [id])
+}
+
+model SaleItem {
+  id        String  @id @default(uuid())
+  saleId    String
+  productId String
+  
+  quantity  Int
+  price     Decimal 
+  
+  sale      Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+// --- FLUXO DE CAIXA ---
+
+model CashFlow {
+  id              String    @id @default(uuid())
+  storeId         String
+  operator        String
+  status          String    @default("CLOSED")
+  
+  openingBalance  Decimal   @default(0)
+  totalRevenue    Decimal   @default(0)
+  totalBleed      Decimal   @default(0)
+  totalSupply     Decimal   @default(0)
+  
+  countedMoney    Decimal?
+  difference      Decimal?
+  
+  startedAt       DateTime  @default(now())
+  closedAt        DateTime?
+
+  movements       CashFlowMovement[]
+  store           Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+}
+
+model CashFlowMovement {
+  id          String   @id @default(uuid())
+  cashFlowId  String
+  type        String
+  value       Decimal
+  description String?
+  createdAt   DateTime @default(now())
+
+  cashFlow    CashFlow @relation(fields: [cashFlowId], references: [id], onDelete: Cascade)
+}
+
+// --- DESPESAS (CONTAS A PAGAR) ---
+
+model Expense {
+  id          String   @id @default(uuid())
+  storeId     String
+  
+  description String   // Ex: Conta de Luz
+  category    String   // Ex: Fixa, Fornecedor, Pessoal
+  value       Decimal
+  dueDate     DateTime // Data de Vencimento
+  
+  paid        Boolean  @default(false) // Já pagou?
+  paidAt      DateTime? // Quando pagou?
+  
+  createdAt   DateTime @default(now())
+
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+}
+
+// --- ENUMS ---
+
+enum Role {
+  OWNER
+  MANAGER
+  SELLER
+}
+
+enum StorePlan {
+  FREE
+  PRO
+}
+
+enum PaymentMethod {
+  MONEY
+  CREDIT_CARD
+  DEBIT_CARD
+  PIX
+  CREDIT_STORE 
+}
+
+enum PaymentStatus {
+  PAID
+  PENDING
+}

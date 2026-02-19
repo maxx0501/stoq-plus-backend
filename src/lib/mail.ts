@@ -5,21 +5,32 @@ class MailService {
 
     constructor() {
         // DEBUG: Verificar se credenciais existem
-        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+        const emailUser = process.env.EMAIL_USER;
+        const emailPass = process.env.EMAIL_PASS;
+        
+        if (!emailUser || !emailPass) {
             console.error('❌ ERRO CRÍTICO: EMAIL_USER ou EMAIL_PASS não configurados!');
-            console.error('EMAIL_USER:', process.env.EMAIL_USER ? '✓ Configurado' : '✗ NÃO CONFIGURADO');
-            console.error('EMAIL_PASS:', process.env.EMAIL_PASS ? '✓ Configurado' : '✗ NÃO CONFIGURADO');
+            console.error('EMAIL_USER:', emailUser ? '✓ Configurado' : '✗ NÃO CONFIGURADO');
+            console.error('EMAIL_PASS:', emailPass ? '✓ Configurado' : '✗ NÃO CONFIGURADO');
+            console.error('\n⚠️ VERIFIQUE:');
+            console.error('  1. No Render Dashboard → Environment → EMAIL_USER e EMAIL_PASS existem?');
+            console.error('  2. EMAIL_PASS tem espaços? Remova: abcd efgh → abcdefgh');
+            console.error('  3. Fez "Manual Deploy" após adicionar as variáveis?');
         }
 
+        // ✅ CONFIGURAÇÃO CORRETA PARA GMAIL COM PORTA 465 + SSL
         this.transporter = nodemailer.createTransport({
-            service: 'gmail',
+            host: 'smtp.gmail.com', // Gmail SMTP sempre usa isso
+            port: 465, // Porta para SSL (CORRETO)
+            secure: true, // OBRIGATÓRIO com porta 465
             auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASS
+                user: emailUser,
+                pass: emailPass // Deve ser App Password gerada no Gmail, SEM ESPAÇOS
             },
-            // Opções de timeout maiores para evitar problemas de conexão
-            connectionTimeout: 10000,
-            socketTimeout: 10000
+            connectionTimeout: 15000, // 15 segundos
+            socketTimeout: 15000,
+            logger: true, // Enable logger para debug
+            debug: true // Enable debug output
         });
     }
 
@@ -31,12 +42,13 @@ class MailService {
         console.log('  Para:', to);
         console.log('  Link:', verificationLink);
         console.log('  Email de:', process.env.EMAIL_USER);
+        console.log('  SMTP Host:', 'smtp.gmail.com:465 (SSL)');
 
         try {
             // Testa a conexão com o servidor SMTP ANTES de enviar
-            console.log('🔍 Verificando conexão com Gmail...');
+            console.log('🔍 Verificando conexão com SMTP Gmail...');
             await this.transporter.verify();
-            console.log('✅ Conexão com Gmail verificada!');
+            console.log('✅ Conexão SMTP verificada com sucesso!');
 
             const mailOptions = {
                 from: `"Stoq+ " <${process.env.EMAIL_USER}>`,
@@ -79,24 +91,31 @@ class MailService {
 
             const info = await this.transporter.sendMail(mailOptions);
             console.log('✅ E-mail enviado com sucesso! ID:', info.messageId);
-            console.log('  Resposta:', info.response);
+            console.log('  Response:', info.response);
             
         } catch (error: any) {
-            console.error('❌ ERRO CRÍTICO AO ENVIAR E-MAIL:');
-            console.error('  Tipo:', error.code || error.name);
+            console.error('❌ ERRO AO ENVIAR E-MAIL:');
+            console.error('  Código:', error.code);
+            console.error('  Nome:', error.name);
             console.error('  Mensagem:', error.message);
-            console.error('  Detalhes:', error);
+            console.error('  Stack:', error.stack);
             
-            // Se o erro for de autenticação, dar orientações
-            if (error.message.includes('Invalid login') || error.message.includes('535')) {
-                console.error('\n⚠️ POSSÍVEL SOLUÇÃO:');
-                console.error('  1. Verifique EMAIL_USER no .env');
-                console.error('  2. Se usa 2FA, gere uma "App Password" em https://myaccount.google.com/apppasswords');
-                console.error('  3. USE A APP PASSWORD (16 caracteres), não sua senha do Gmail');
-                console.error('  4. Copie SEM ESPAÇOS: abcdefghijklmnop');
+            // Diagnosticar o problema específico
+            if (error.code === 'EAUTH') {
+                console.error('\n🔐 ERRO DE AUTENTICAÇÃO - Possíveis causas:');
+                console.error('  ❌ EMAIL_PASS com espaços (remova: "abc d efg" → "abcdefg")');
+                console.error('  ❌ EMAIL_USER incorreto');
+                console.error('  ❌ App Password não foi gerada (precisa de 2FA no Gmail)');
+                console.error('  ❌ Credenciais não foram atualizadas no Render');
+                console.error('\n✅ Solução:');
+                console.error('  1. Acesse: https://myaccount.google.com/apppasswords');
+                console.error('  2. Gere uma App Password para "Mail" e "Windows Computer"');
+                console.error('  3. COPIE SEM ESPAÇOS (16 caracteres seguidos)');
+                console.error('  4. Cole no Render → Environment → EMAIL_PASS');
+                console.error('  5. Click "Manual Deploy"');
             }
             
-            throw new Error(`Email service unavailable: ${error.message}`);
+            throw new Error(`Email service error: ${error.message}`);
         }
     }
 }

@@ -100,6 +100,8 @@ app.use('/auth/login', loginLimiter);
 app.use('/auth/signup', loginLimiter);
 
 // ===== ARQUIVO ESTÁTICO (UPLOADS) =====
+// Serve arquivos estáticos da pasta 'uploads'
+app.use('/uploads', express.static('uploads'));
 
 // --- MAPA DE ROTAS ---
 

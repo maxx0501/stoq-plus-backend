@@ -14,13 +14,13 @@ class MailService {
             console.error('EMAIL_PASS:', emailPass ? '✓ Configurado' : '✗ NÃO CONFIGURADO');
         }
 
-        // ✅ USAR CONFIGURAÇÃO MANUAL COM FAMILY: 4 (IPv4 ONLY)
-        // Render bloqueia IPv6 para Gmail, então forçamos IPv4
+        // ✅ USAR PORT 587 COM STARTTLS (RENDER BLOQUEIA PORT 465)
+        // Port 587 é mais permissivo em ambientes cloud
         this.transporter = nodemailer.createTransport({
             host: 'smtp.gmail.com',
-            port: 465,
-            secure: true,
-            family: 4, // Force IPv4 only - Render blocks IPv6
+            port: 587,
+            secure: false, // false para STARTTLS em port 587
+            requireTLS: true,
             auth: {
                 user: emailUser,
                 pass: emailPass

@@ -38,10 +38,8 @@ router.post('/signup', async (req, res) => {
             data: { name, email, passwordHash: hash, isVerified: false, verificationToken }
         });
 
-        // Envia email de forma assíncrona (fire-and-forget) para não bloquear o usuário
-        mailService.sendVerificationEmail(email, verificationToken).catch(err => {
-            console.error('Erro ao enviar email de verificação:', err);
-        });
+        // ✅ CORREÇÃO: Usando await para o Render não cortar a execução em segundo plano
+        await mailService.sendVerificationEmail(email, verificationToken);
         
         return res.status(201).json({ message: "Usuário criado. Verifique seu e-mail." });
     } catch (error: any) {
@@ -65,13 +63,12 @@ router.post('/resend-code', async (req, res) => {
         const newVerificationToken = crypto.randomBytes(32).toString('hex');
         await prisma.user.update({ where: { id: user.id }, data: { verificationToken: newVerificationToken } });
         
-        // Envia email de forma assíncrona (fire-and-forget)
-        mailService.sendVerificationEmail(user.email, newVerificationToken).catch(err => {
-            console.error('Erro ao reenviar email de verificação:', err);
-        });
+        // ✅ CORREÇÃO: Usando await para o Render não cortar a execução em segundo plano
+        await mailService.sendVerificationEmail(user.email, newVerificationToken);
 
         return res.json({ message: "Código reenviado!" });
     } catch (error) {
+        console.error('Resend code error:', error);
         return res.status(500).json({ error: "Erro ao reenviar código." });
     }
 });

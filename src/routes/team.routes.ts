@@ -14,14 +14,25 @@ router.get('/', async (req, res) => {
         return res.json(sellers.map(s => ({ id: s.id, name: s.user.name, email: s.user.email, role: s.role, canSell: s.canSell, canManageProducts: s.canManageProducts })));
     } catch (e) { return res.status(500).json({ error: "Erro equipe." }); }
 });
-
-// Adicionar Vendedor (ATUALIZADO)
 router.post('/', async (req, res) => {
     const user = (req as any).user;
     if (user.role === 'SELLER') return res.status(403).json({error: "Sem permissão"});
     
     try {
-        const { name, email, password, role } = req.body;
+        // 1. Lendo TODAS as variáveis que o front envia, incluindo as permissões
+        const { name, email, password, role, canSell, canManageProducts } = req.body;
+
+        // 2. Trava de segurança: Evita criar senha "123" que falha no login
+        if (!password || password.length < 8) {
+            return res.status(400).json({ error: "A senha provisória deve ter no mínimo 8 caracteres." });
+        }
+
+        // 3. Prevenção de quebra do servidor (Verifica se o email já existe)
+        const existingUser = await prisma.user.findUnique({ where: { email } });
+        if (existingUser) {
+            return res.status(400).json({ error: "Este e-mail já está cadastrado no sistema." });
+        }
+
         const hash = await bcrypt.hash(password, 10);
         
         await prisma.$transaction(async (tx) => {
@@ -30,17 +41,27 @@ router.post('/', async (req, res) => {
                     name, 
                     email, 
                     passwordHash: hash,
-                    isVerified: true // Opcional: já marca como verificado pois o dono criou
+                    isVerified: true // Já marca como verificado pois o dono criou
                 } 
             });
             
             await tx.storeUser.create({ 
-                data: { userId: newUser.id, storeId: user.storeId, role: role || 'SELLER' } 
+                data: { 
+                    userId: newUser.id, 
+                    storeId: user.storeId, 
+                    role: role || 'SELLER',
+                    // 4. Salvando as permissões diretamente na criação!
+                    canSell: canSell !== undefined ? canSell : true,
+                    canManageProducts: canManageProducts !== undefined ? canManageProducts : false
+                } 
             });
         });
         
         return res.status(201).json({ message: "Criado." });
-    } catch (e) { return res.status(500).json({ error: "Erro ao criar membro." }); }
+    } catch (e) { 
+        console.error("Erro ao criar membro da equipe:", e);
+        return res.status(500).json({ error: "Erro ao criar membro." }); 
+    }
 });
 
 // Editar Permissões (NOVO)

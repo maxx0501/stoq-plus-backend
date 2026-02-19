@@ -66,8 +66,6 @@ app.use(cors({
     optionsSuccessStatus: 200
 }));
 
-const server = app.listen(PORT, () => console.log(`🚀 Server rodando na porta ${PORT}`));
-
 // 3. Rate Limiting - Proteção contra força bruta
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos

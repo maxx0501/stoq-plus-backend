@@ -18,15 +18,35 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
     const user = (req as any).user;
     try {
-        const { name, price, stock, description, category, imageUrl } = req.body;
+        const { name, price, stock, description, category, imageUrl, costPrice, minStock, isVisible } = req.body;
+        
+        // Validação básica
+        if (!name || name.trim() === '') {
+            return res.status(400).json({ error: "Nome é obrigatório." });
+        }
+        if (price === undefined || price === null || Number(price) < 0) {
+            return res.status(400).json({ error: "Preço deve ser um número válido." });
+        }
+        
         const product = await prisma.product.create({ 
             data: { 
-                storeId: user.storeId, name, price: Number(price), stock: Number(stock), 
-                description: description || '', category: category || 'Geral', imageUrl: imageUrl || '' 
+                storeId: user.storeId, 
+                name: name.trim(), 
+                price: Number(price), 
+                stock: Number(stock) || 0, 
+                description: (description || '').trim(), 
+                category: (category || 'Geral').trim(), 
+                imageUrl: imageUrl || '',
+                costPrice: costPrice ? Number(costPrice) : 0,
+                minStock: minStock ? Number(minStock) : 0,
+                isVisible: isVisible !== false
             } 
         });
         return res.json(product);
-    } catch (e) { return res.status(500).json({ error: "Erro criar produto." }); }
+    } catch (e: any) { 
+        console.error('Erro ao criar produto:', e);
+        return res.status(500).json({ error: "Erro criar produto: " + e.message }); 
+    }
 });
 
 router.put('/:id', async (req, res) => {
@@ -41,14 +61,35 @@ router.put('/:id', async (req, res) => {
             return res.status(403).json({ error: "Acesso negado." });
         }
         
+        // Prepara os dados, convertendo tipos corretamente
+        const updateData: any = { ...req.body };
+        
+        // Converte valores numéricos se recebidos como string
+        if (updateData.price !== undefined && updateData.price !== null) {
+            updateData.price = Number(updateData.price);
+        }
+        if (updateData.stock !== undefined && updateData.stock !== null) {
+            updateData.stock = Number(updateData.stock);
+        }
+        if (updateData.costPrice !== undefined && updateData.costPrice !== null) {
+            updateData.costPrice = Number(updateData.costPrice);
+        }
+        if (updateData.minStock !== undefined && updateData.minStock !== null) {
+            updateData.minStock = Number(updateData.minStock);
+        }
+        
+        // Remove campos que não devem ser editados
+        delete updateData.storeId;
+        delete updateData.id;
+        
         const product = await prisma.product.update({ 
             where: { id: req.params.id },
-            data: { ...req.body }
+            data: updateData
         });
         return res.json(product);
-    } catch (e) { 
+    } catch (e: any) { 
         console.error('Erro ao editar produto:', e);
-        return res.status(500).json({ error: "Erro ao editar produto." }); 
+        return res.status(500).json({ error: "Erro ao editar produto: " + e.message }); 
     }
 });
 

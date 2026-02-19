@@ -64,15 +64,17 @@ router.put('/member/:id', async (req, res) => {
     }
 });
 
-// Demitir (MANTENHA IGUAL)
+// Demitir - Remove apenas a relação StoreUser, não o usuário inteiro
 router.delete('/:id', async (req, res) => {
     const user = (req as any).user;
     if (user.role !== 'OWNER') return res.status(403).json({error: "Apenas dono."});
     try {
         const membership = await prisma.storeUser.findUnique({ where: { id: req.params.id } });
-        if(membership) {
-            await prisma.user.delete({ where: { id: membership.userId } });
+        if (!membership) {
+            return res.status(404).json({ error: "Membro não encontrado." });
         }
+        // Apenas remove a relação StoreUser, não deleta o usuário
+        await prisma.storeUser.delete({ where: { id: req.params.id } });
         return res.status(204).send();
     } catch (e) { return res.status(500).json({ error: "Erro ao demitir." }); }
 });

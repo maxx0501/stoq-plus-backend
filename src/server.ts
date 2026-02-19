@@ -66,28 +66,33 @@ app.use(cors({
     optionsSuccessStatus: 200
 }));
 
-// 3. Rate Limiting - Proteção contra força bruta
+// 3. Rate Limiting - Proteção contra força bruta (RELAXADO PARA PRODUÇAO)
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos
-    max: 100, // Limita 100 requisições por IP
+    max: 300, // Aumentado de 100 para 300 requisições por IP (permite até 20 req/min)
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req) => {
+        // Skip rate limit para requisições GET de leitura (lista, detalhes)
+        return req.method === 'GET' && !req.path.includes('/auth');
+    },
     handler: (req, res) => {
+        console.warn(`⚠️ Rate limit excedido para IP: ${req.ip}`);
         return res.status(429).json({ error: 'Muitas requisições, tente novamente mais tarde' });
     }
 });
 
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 5, // Apenas 5 tentativas de login
+    max: 10, // Aumentado de 5 para 10 tentativas de login
     skipSuccessfulRequests: true,
     handler: (req, res) => {
         return res.status(429).json({ error: 'Muitas tentativas de login, tente novamente em 15 minutos' });
     }
 });
 
-app.use(express.json({ limit: '10mb' })); // Reduzido de 50mb para 10mb
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(express.json({ limit: '50mb' })); // Aumentado para suportar uploads maiores
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(limiter); // Aplicar rate limiter globalmente
 
 // ===== PROTEÇÃO DE ROTAS SENSÍVEIS =====
@@ -119,6 +124,30 @@ app.use('/my-sales-metrics', statsRoutes);
 
 // Rota de Teste
 app.get('/', (req, res) => res.send('🚀 Stoq+ API Modular Rodando e Corrigida!'));
+
+// --- ERROR HANDLER GLOBAL ---
+app.use((err: any, req: any, res: any, next: any) => {
+    console.error('❌ Erro não tratado:', err);
+    
+    // CORS errors
+    if (err.message === 'CORS não permitido') {
+        return res.status(403).json({ error: 'CORS não permitido' });
+    }
+    
+    // Prisma errors
+    if (err.code === 'P1000') {
+        return res.status(503).json({ error: 'Banco de dados indisponível, tente novamente' });
+    }
+    if (err.code === 'P2002') {
+        return res.status(400).json({ error: 'Registro duplicado' });
+    }
+    if (err.code === 'P2025') {
+        return res.status(404).json({ error: 'Registro não encontrado' });
+    }
+    
+    // Default error
+    return res.status(500).json({ error: 'Erro interno do servidor' });
+});
 
 // --- SETUP INICIAL ---
 const setupSuperAdmin = async () => {

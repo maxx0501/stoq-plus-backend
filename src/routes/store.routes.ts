@@ -4,7 +4,10 @@ import { authMiddleware } from '../middlewares/auth';
 import jwt from 'jsonwebtoken';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    throw new Error('❌ JWT_SECRET não definida em .env');
+}
 
 // Protege todas as rotas de loja
 router.use(authMiddleware);

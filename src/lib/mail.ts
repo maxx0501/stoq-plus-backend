@@ -4,12 +4,22 @@ class MailService {
     private transporter: any;
 
     constructor() {
+        // DEBUG: Verificar se credenciais existem
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+            console.error('❌ ERRO CRÍTICO: EMAIL_USER ou EMAIL_PASS não configurados!');
+            console.error('EMAIL_USER:', process.env.EMAIL_USER ? '✓ Configurado' : '✗ NÃO CONFIGURADO');
+            console.error('EMAIL_PASS:', process.env.EMAIL_PASS ? '✓ Configurado' : '✗ NÃO CONFIGURADO');
+        }
+
         this.transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: {
                 user: process.env.EMAIL_USER,
                 pass: process.env.EMAIL_PASS
-            }
+            },
+            // Opções de timeout maiores para evitar problemas de conexão
+            connectionTimeout: 10000,
+            socketTimeout: 10000
         });
     }
 
@@ -17,10 +27,18 @@ class MailService {
         const backendUrl = process.env.BACKEND_URL || process.env.API_URL || 'http://localhost:3333';
         const verificationLink = `${backendUrl}/auth/verify?token=${token}`;
 
-        try {
-            console.log(`📤 Conectando ao Gmail para enviar e-mail para: ${to}...`);
+        console.log('📤 INICIANDO ENVIO DE EMAIL');
+        console.log('  Para:', to);
+        console.log('  Link:', verificationLink);
+        console.log('  Email de:', process.env.EMAIL_USER);
 
-            await this.transporter.sendMail({
+        try {
+            // Testa a conexão com o servidor SMTP ANTES de enviar
+            console.log('🔍 Verificando conexão com Gmail...');
+            await this.transporter.verify();
+            console.log('✅ Conexão com Gmail verificada!');
+
+            const mailOptions = {
                 from: `"Stoq+ " <${process.env.EMAIL_USER}>`,
                 to,
                 subject: 'Bem-vindo ao Stoq+! Confirme sua conta',
@@ -57,13 +75,28 @@ class MailService {
                         </div>
                     </div>
                 `
-            });
+            };
 
-            console.log('✅ E-mail enviado com sucesso via Gmail!');
+            const info = await this.transporter.sendMail(mailOptions);
+            console.log('✅ E-mail enviado com sucesso! ID:', info.messageId);
+            console.log('  Resposta:', info.response);
             
-        } catch (error) {
-            console.error('❌ Erro crítico ao enviar e-mail:', error);
-            throw new Error('Não foi possível enviar o e-mail de confirmação.');
+        } catch (error: any) {
+            console.error('❌ ERRO CRÍTICO AO ENVIAR E-MAIL:');
+            console.error('  Tipo:', error.code || error.name);
+            console.error('  Mensagem:', error.message);
+            console.error('  Detalhes:', error);
+            
+            // Se o erro for de autenticação, dar orientações
+            if (error.message.includes('Invalid login') || error.message.includes('535')) {
+                console.error('\n⚠️ POSSÍVEL SOLUÇÃO:');
+                console.error('  1. Verifique EMAIL_USER no .env');
+                console.error('  2. Se usa 2FA, gere uma "App Password" em https://myaccount.google.com/apppasswords');
+                console.error('  3. USE A APP PASSWORD (16 caracteres), não sua senha do Gmail');
+                console.error('  4. Copie SEM ESPAÇOS: abcdefghijklmnop');
+            }
+            
+            throw new Error(`Email service unavailable: ${error.message}`);
         }
     }
 }

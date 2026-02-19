@@ -18,8 +18,9 @@ router.post('/', async (req, res) => {
         const sale = await prisma.$transaction(async (tx) => {
             for (const item of items) {
                 const p = await tx.product.findUnique({ where: { id: item.productId } });
-                if (!p || p.stock < item.quantity) throw new Error(`Estoque insuficiente: ${p?.name}`);
-                total += Number(p.price) * item.quantity;
+                const quantity = Number(item.quantity);
+                if (!p || p.stock < quantity) throw new Error(`Estoque insuficiente: ${p?.name}`);
+                total += Number(p.price) * quantity;
             }
 
             const newSale = await tx.sale.create({
@@ -31,8 +32,9 @@ router.post('/', async (req, res) => {
 
             for (const item of items) {
                 const p = await tx.product.findUnique({ where: { id: item.productId } });
-                await tx.saleItem.create({ data: { saleId: newSale.id, productId: item.productId, quantity: item.quantity, price: p!.price } });
-                await tx.product.update({ where: { id: item.productId }, data: { stock: { decrement: item.quantity } } });
+                const quantity = Number(item.quantity);
+                await tx.saleItem.create({ data: { saleId: newSale.id, productId: item.productId, quantity: quantity, price: p!.price } });
+                await tx.product.update({ where: { id: item.productId }, data: { stock: { decrement: quantity } } });
             }
             return newSale;
         });

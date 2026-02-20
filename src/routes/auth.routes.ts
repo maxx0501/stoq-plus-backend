@@ -112,7 +112,7 @@ router.get('/verify', async (req, res) => {
 
         await prisma.user.update({ where: { id: user.id }, data: { isVerified: true, verificationToken: null } });
         // ✅ REDIRECIONAR PARA FRONTEND - NÃO EXPOR TOKEN EM URL
-        return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?verified=true`);
+        return res.redirect(`${process.env.FRONTEND_URL || 'https://stoqplus.com.br'}/login?verified=true`);
     } catch (error) {
         console.error('GET Verify error:', error);
         return res.status(500).json({ error: "Erro ao validar." });
@@ -253,7 +253,7 @@ router.get('/google/callback', async (req, res) => {
             client_secret: process.env.GOOGLE_CLIENT_SECRET,
             code,
             grant_type: 'authorization_code',
-            redirect_uri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3333/auth/google/callback',
+            redirect_uri: process.env.GOOGLE_REDIRECT_URI || 'https://stoqplus.com.br/auth/google/callback',
         });
 
         const { access_token } = tokenRes.data;
@@ -280,13 +280,13 @@ router.get('/google/callback', async (req, res) => {
         );
 
         // ✅ ARMAZENAR TOKEN SEGURAMENTE (httpOnly em produção)
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        const frontendUrl = process.env.FRONTEND_URL || 'https://stoqplus.com.br';
         // Em produção, usar cookies httpOnly. Por enquanto redirecionar com token em sessão
         return res.redirect(`${frontendUrl}/login?google_token=${token}&user_name=${encodeURIComponent(user.name)}`);
 
     } catch (error) {
         console.error("Erro no Google Auth:", error);
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        const frontendUrl = process.env.FRONTEND_URL || 'https://stoqplus.com.br';
         return res.redirect(`${frontendUrl}/login?error=google_auth_failed`);
     }
 });

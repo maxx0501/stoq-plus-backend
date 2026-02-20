@@ -56,7 +56,7 @@ router.put('/me', authMiddleware, upload.single('avatar'), async (req, res) => {
         // Se o usuário enviou uma foto nova
         if (file) {
             // Usa variável de ambiente para suportar tanto local quanto produção
-            const backendUrl = process.env.BACKEND_URL || process.env.API_URL || 'http://localhost:3333';
+            const backendUrl = process.env.BACKEND_URL || process.env.API_URL || 'https://stoqplus.com.br';
             dataToUpdate.avatarUrl = `${backendUrl}/uploads/${file.filename}`;
         }
 

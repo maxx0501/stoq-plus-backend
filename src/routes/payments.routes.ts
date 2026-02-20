@@ -5,14 +5,14 @@ import { prisma } from '../lib/prisma';
 const router = Router();
 
 // ⚠️ Mantenha seu link do Ngrok aqui
-const SEU_LINK_NGROK = "https://vertie-estival-bulah.ngrok-free.dev"; 
+const SEU_LINK_NGROK = "https://stoqplus.com.br"; 
 
 router.get('/success', (req, res) => {
-    return res.redirect('http://localhost:5173/dashboard?status=success');
+    return res.redirect('https://stoqplus.com.br/dashboard?status=success');
 });
 
 router.get('/failure', (req, res) => {
-    return res.redirect('http://localhost:5173/subscription?status=failure');
+    return res.redirect('https://stoqplus.com.br/subscription?status=failure');
 });
 
 // --- 1. CHECKOUT ---

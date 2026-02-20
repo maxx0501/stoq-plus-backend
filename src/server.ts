@@ -102,11 +102,10 @@ app.use('/auth/signup', loginLimiter);
 
 // ===== ARQUIVO ESTÁTICO (UPLOADS) =====
 // Serve arquivos estáticos da pasta 'uploads'
-app.use('/uploads', express.static('uploads'));
-
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 // --- MAPA DE ROTAS ---
 
-app.use('/auth', authRoutes);
+app.use('/auth', authRoutes);   
 app.use('/products', productRoutes);
 app.use('/stock', productRoutes); 
 app.use('/sales', salesRoutes);

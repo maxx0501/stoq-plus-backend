@@ -38,7 +38,7 @@ router.post('/signup', async (req, res) => {
             data: { name, email, passwordHash: hash, isVerified: false, verificationToken }
         });
 
-        // ✅ CORREÇÃO: Usando await para o Render não cortar a execução em segundo plano
+        // ✅ CORREÇÃO: Usando await para o não cortar a execução em segundo plano
         await mailService.sendVerificationEmail(email, verificationToken);
         
         return res.status(201).json({ message: "Usuário criado. Verifique seu e-mail." });
@@ -63,7 +63,7 @@ router.post('/resend-code', async (req, res) => {
         const newVerificationToken = crypto.randomBytes(32).toString('hex');
         await prisma.user.update({ where: { id: user.id }, data: { verificationToken: newVerificationToken } });
         
-        // ✅ CORREÇÃO: Usando await para o Render não cortar a execução em segundo plano
+        // ✅ CORREÇÃO: Usando await para o  não cortar a execução em segundo plano
         await mailService.sendVerificationEmail(user.email, newVerificationToken);
 
         return res.json({ message: "Código reenviado!" });

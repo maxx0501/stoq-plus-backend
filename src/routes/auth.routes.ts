@@ -233,7 +233,7 @@ router.get('/google', (req, res) => {
     const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth`;
     const params = new URLSearchParams({
         client_id: process.env.GOOGLE_CLIENT_ID || '',
-        redirect_uri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3333/auth/google/callback',
+        redirect_uri: process.env.GOOGLE_REDIRECT_URI || 'https://stoqplus.com.br/auth/google/callback',
         response_type: 'code',
         scope: 'profile email',
         access_type: 'offline',

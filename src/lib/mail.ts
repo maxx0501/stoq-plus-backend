@@ -4,50 +4,36 @@ class MailService {
     private transporter: any;
 
     constructor() {
-        // DEBUG: Verificar se credenciais existem
-        const emailUser = process.env.EMAIL_USER;
-        const emailPass = process.env.EMAIL_PASS;
+        const resendApiKey = process.env.RESEND_API_KEY;
         
-        if (!emailUser || !emailPass) {
-            console.error('❌ ERRO CRÍTICO: EMAIL_USER ou EMAIL_PASS não configurados!');
-            console.error('EMAIL_USER:', emailUser ? '✓ Configurado' : '✗ NÃO CONFIGURADO');
-            console.error('EMAIL_PASS:', emailPass ? '✓ Configurado' : '✗ NÃO CONFIGURADO');
+        if (!resendApiKey) {
+            console.error('❌ ERRO CRÍTICO: RESEND_API_KEY não configurada no .env!');
         }
 
-        // ✅ USAR PORT 587 COM STARTTLS (RENDER BLOQUEIA PORT 465)
-        // Port 587 é mais permissivo em ambientes cloud
+        // ✅ Configuração oficial do Resend via SMTP
         this.transporter = nodemailer.createTransport({
-            host: 'smtp.gmail.com',
-            port: 587,
-            secure: false, // false para STARTTLS em port 587
-            requireTLS: true,
+            host: 'smtp.resend.com',
+            port: 465,
+            secure: true, // true para porta 465
             auth: {
-                user: emailUser,
-                pass: emailPass
-            },
-            connectionTimeout: 10000,
-            socketTimeout: 10000,
-            logger: true,
-            debug: process.env.NODE_ENV === 'development'
+                user: 'resend', // O usuário no Resend é LITERALMENTE a palavra 'resend'
+                pass: resendApiKey // A chave que você gerou: re_...
+            }
         } as any);
     }
 
     async sendVerificationEmail(to: string, token: string) {
-        const backendUrl = process.env.BACKEND_URL || process.env.API_URL || 'http://localhost:3333';
+        // Agora pega a URL oficial de produção
+        const backendUrl = process.env.API_URL || 'https://api.stoqplus.com.br';
         const verificationLink = `${backendUrl}/auth/verify?token=${token}`;
 
-        console.log('📤 INICIANDO ENVIO DE EMAIL');
+        console.log('📤 INICIANDO ENVIO DE EMAIL VIA RESEND');
         console.log('  Para:', to);
-        console.log('  Backend URL:', backendUrl);
-        console.log('  Email de:', process.env.EMAIL_USER);
 
         try {
-            console.log('🔍 Verificando conexão com Gmail...');
-            await this.transporter.verify();
-            console.log('✅ Conexão com Gmail verificada!');
-
             const mailOptions = {
-                from: `"Stoq+ " <${process.env.EMAIL_USER}>`,
+                // 🚨 O PULO DO GATO: O remetente TEM que ser do seu domínio!
+                from: '"Stoq+ Sistemas" <nao-responda@stoqplus.com.br>',
                 to,
                 subject: 'Bem-vindo ao Stoq+! Confirme sua conta',
                 html: `
@@ -86,32 +72,12 @@ class MailService {
             };
 
             const info = await this.transporter.sendMail(mailOptions);
-            console.log('✅ E-mail enviado com sucesso!');
+            console.log('✅ E-mail enviado com sucesso pelo Resend!');
             console.log('  Message ID:', info.messageId);
             
         } catch (error: any) {
-            console.error('❌ ERRO CRÍTICO AO ENVIAR E-MAIL:');
-            console.error('  Código:', error.code);
-            console.error('  Nome:', error.name);
+            console.error('❌ ERRO AO ENVIAR E-MAIL:');
             console.error('  Mensagem:', error.message);
-            console.error('  Stack:', error.stack);
-            
-            // Diagnosticar o problema específico
-            if (error.code === 'EAUTH' || error.message.includes('Invalid login') || error.message.includes('535')) {
-                console.error('\n🔐 ERRO DE AUTENTICAÇÃO - Possíveis causas:');
-                console.error('  1. EMAIL_PASS tem espaços (remova: "abc d efg" → "abcdefg")');
-                console.error('  2. EMAIL_USER incorreto');
-                console.error('  3. 2FA não ativado no Gmail (precisa 2FA para App Password)');
-                console.error('  4. App Password não foi criada corretamente');
-                console.error('\n✅ Solução:');
-                console.error('  a) https://myaccount.google.com/apppasswords');
-                console.error('  b) Gere para: Mail + Windows Computer');
-                console.error('  c) Google gera: "abc d efg h ijk l mno p"');
-                console.error('  d) COPIE SEM ESPAÇOS: abcdefghijklmnop');
-                console.error('  e) Cole no Render Environment → EMAIL_PASS');
-                console.error('  f) Click Manual Deploy');
-            }
-            
             throw new Error(`Email service error: ${error.message}`);
         }
     }

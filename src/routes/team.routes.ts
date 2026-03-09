@@ -41,7 +41,8 @@ router.post('/', async (req, res) => {
                     name, 
                     email, 
                     passwordHash: hash,
-                    isVerified: true // Já marca como verificado pois o dono criou
+                    isVerified: true, // Já marca como verificado pois o dono criou
+                    mustChangePassword: true // Força usuário a mudar senha no primeiro login
                 } 
             });
             

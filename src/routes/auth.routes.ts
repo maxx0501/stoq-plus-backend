@@ -160,7 +160,8 @@ router.post('/login', async (req, res) => {
                 role: userRole, 
                 isSuperAdmin: user.isSuperAdmin,
                 plan: storeLink?.store?.plan || 'FREE',
-                storeCreatedAt: storeLink?.store?.createdAt
+                storeCreatedAt: storeLink?.store?.createdAt,
+                mustChangePassword: user.mustChangePassword
             }, token, storeId: storeLink?.storeId 
         });
     } catch (error: any) {
@@ -185,9 +186,12 @@ router.put('/change-password', authMiddleware, async (req, res) => {
         const hash = await bcrypt.hash(newPassword, 10);
         await prisma.user.update({ 
             where: { id: userId }, 
-            data: { passwordHash: hash }
+            data: { 
+                passwordHash: hash,
+                mustChangePassword: false // Libera acesso após trocar a senha
+            }
         });
-        return res.json({ message: "Senha alterada!" });
+        return res.json({ message: "Senha alterada com sucesso!" });
     } catch (error: any) {
         if (error.name === 'ZodError') {
             return res.status(400).json({ error: error.errors[0]?.message });
@@ -316,7 +320,8 @@ router.get('/me', async (req, res) => {
                 avatarUrl: user.avatarUrl,
                 isSuperAdmin: user.isSuperAdmin,
                 plan: store?.plan || 'FREE',
-                storeCreatedAt: store?.createdAt
+                storeCreatedAt: store?.createdAt,
+                mustChangePassword: user.mustChangePassword
             },
             store: store ? { id: store.id, name: store.name } : null
         });

@@ -103,14 +103,23 @@ app.use('/auth/signup', loginLimiter);
 // ===== ARQUIVO ESTÁTICO (UPLOADS) =====
 // Serve arquivos estáticos da pasta 'uploads' com CORS permitido
 app.use('/uploads', (req, res, next) => {
+    // Headers CORS para permitir acesso de qualquer origem
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Vary', 'Origin');
+    res.header('Cache-Control', 'public, max-age=3600');
+    
+    // Responde a requisições OPTIONS (CORS preflight)
     if (req.method === 'OPTIONS') {
         return res.sendStatus(200);
     }
     next();
-}, express.static(path.join(__dirname, '..', 'uploads')));
+}, express.static(path.join(__dirname, '..', 'uploads'), {
+    setHeaders: (res) => {
+        res.set('Access-Control-Allow-Origin', '*');
+    }
+}));
 // --- MAPA DE ROTAS ---
 
 app.use('/auth', authRoutes);   

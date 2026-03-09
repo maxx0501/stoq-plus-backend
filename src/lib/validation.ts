@@ -21,11 +21,7 @@ export const SignupSchema = z.object({
 
 export const ChangePasswordSchema = z.object({
     newPassword: z.string()
-        .min(8, 'Senha deve ter no mínimo 8 caracteres')
-        .regex(/[A-Z]/, 'Deve conter letra maiúscula')
-        .regex(/[a-z]/, 'Deve conter letra minúscula')
-        .regex(/[0-9]/, 'Deve conter número')
-        .regex(/[!@#$%^&*(),.?":{}|<>]/, 'Deve conter caractere especial')
+        .min(6, 'Senha deve ter no mínimo 6 caracteres')
 });
 
 // Products

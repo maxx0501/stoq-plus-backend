@@ -161,6 +161,7 @@ router.post('/login', async (req, res) => {
                 isSuperAdmin: user.isSuperAdmin,
                 plan: storeLink?.store?.plan || 'FREE',
                 storeCreatedAt: storeLink?.store?.createdAt,
+                isSubscribed: storeLink?.store?.isSubscribed || false,
                 mustChangePassword: user.mustChangePassword
             }, token, storeId: storeLink?.storeId 
         });
@@ -293,6 +294,7 @@ router.get('/me', async (req, res) => {
                 isSuperAdmin: user.isSuperAdmin,
                 plan: store?.plan || 'FREE',
                 storeCreatedAt: store?.createdAt,
+                isSubscribed: store?.isSubscribed || false,
                 mustChangePassword: user.mustChangePassword
             },
             store: store ? { id: store.id, name: store.name } : null

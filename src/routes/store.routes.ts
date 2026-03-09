@@ -33,7 +33,8 @@ router.post('/', async (req, res) => {
             const newStore = await tx.store.create({
                 data: {
                     name,
-                    plan: 'FREE' 
+                    plan: 'FREE',
+                    isSubscribed: false  // 🔒 Bloqueado até assinar
                 }
             });
 

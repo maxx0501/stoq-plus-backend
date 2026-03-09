@@ -41,7 +41,11 @@ model Store {
   plan      StorePlan @default(FREE)
   createdAt DateTime  @default(now())
   
-  subscriptionExpiresAt DateTime? 
+  // --- ASSINATURA RECORRENTE (COMO NETFLIX) ---
+  isSubscribed              Boolean   @default(false)  // Se tem assinatura ativa
+  subscriptionExpiresAt     DateTime? 
+  mercadoPagoPreapprovalId  String?   // ID da assinatura recorrente no MP
+  nextBillingDate           DateTime? // Próxima cobrança agendada
 
   // Relações
   memberships   StoreUser[]

@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { preference, payment } from '../lib/mercadopago'; 
-import { prisma } from '../lib/prisma'; 
+import { prisma } from '../lib/prisma';
 
 const router = Router();
 
-// ⚠️ Mantenha seu link do Ngrok aqui
-const SEU_LINK_NGROK = "https://stoqplus.com.br"; 
+const SEU_LINK_NGROK = "https://stoqplus.com.br";
+const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN || '';
+const MP_API = 'https://api.mercadopago.com'; 
 
 router.get('/success', (req, res) => {
     return res.redirect('https://stoqplus.com.br/dashboard?status=success');
@@ -15,87 +16,113 @@ router.get('/failure', (req, res) => {
     return res.redirect('https://stoqplus.com.br/subscription?status=failure');
 });
 
-// --- 1. CHECKOUT ---
+// --- 1. CHECKOUT SIMPLES - PREFERENCES API ---
 router.post('/create-checkout', async (req, res) => {
     try {
-        const { planType, storeId } = req.body;
+        const { storeId } = req.body;
 
         if (!storeId) return res.status(400).json({ error: "Store ID is required" });
 
-        const isYearly = planType === 'yearly';
-        
-        // --- PREÇO ATUALIZADO ---
-        // Anual: 389.90 (Conforme solicitado)
-        const price = isYearly ? 389.90 : 49.90;
-        
-        const title = isYearly 
-            ? "Stoq+ Anual (Acesso total por 12 meses)" 
-            : "Stoq+ Mensal (Acesso por 30 dias)";
+        const store = await prisma.store.findUnique({ where: { id: storeId } });
+        if (!store) return res.status(404).json({ error: "Loja não encontrada" });
 
-        const backUrls = {
-            success: `${SEU_LINK_NGROK}/payments/success`,
-            failure: `${SEU_LINK_NGROK}/payments/failure`,
-            pending: `${SEU_LINK_NGROK}/payments/failure`
+        console.log(`\n💳 Criando checkout para loja: ${store.name}`);
+
+        // Primeira compra = R$ 1,00 (teste)
+        // Depois recicla como R$ 49,90/mês
+        const firstPrice = store.isSubscribed ? 49.90 : 1.00;
+        const description = store.isSubscribed 
+            ? `Renovação - Stoq+ Premium` 
+            : `Teste Grátis - Stoq+ Premium (depois R$ 49,90/mês)`;
+
+        // Criar preference
+        const preferenceData = {
+            items: [
+                {
+                    title: `Stoq+ Premium - Assinatura Mensal`,
+                    description: description,
+                    unit_price: firstPrice,
+                    quantity: 1,
+                    currency_id: 'BRL'
+                }
+            ],
+            payer: {
+                name: store.name
+            },
+            external_reference: storeId,
+            back_urls: {
+                success: `https://stoqplus.com.br/dashboard?status=success`,
+                failure: `https://stoqplus.com.br/subscription?status=failure`,
+                pending: `https://stoqplus.com.br/subscription?status=pending`
+            },
+            auto_return: 'approved',
+            notification_url: 'https://stoqplus.com.br/payments/webhook'
         };
 
-        const result = await preference.create({
-            body: {
-                items: [
-                    {
-                        id: planType,
-                        title: title,
-                        quantity: 1,
-                        unit_price: price,
-                        currency_id: 'BRL',
-                    },
-                ],
-                external_reference: storeId,
-                back_urls: backUrls,
-                auto_return: "approved",
-                statement_descriptor: "STOQ PLUS"
-            }
+        const response = await preference.create({ body: preferenceData });
+
+        console.log(`✅ Preference criada: ${response.id}`);
+        console.log(`   Preço: R$ ${firstPrice}`);
+        console.log(`   Init Point: ${response.init_point}\n`);
+
+        return res.json({
+            init_point: response.init_point,
+            preference_id: response.id
         });
 
-        return res.json({ init_point: result.init_point });
     } catch (error: any) {
-        console.error("❌ Erro MP:", error);
-        return res.status(500).json({ error: "Erro ao criar preferência", details: error.message });
+        console.error("❌ Erro ao criar preferência:", error.message);
+        return res.status(500).json({
+            error: "Erro ao criar preferência",
+            details: error.message
+        });
     }
 });
 
-// --- 2. WEBHOOK (Mantido igual) ---
+// --- 2. WEBHOOK (Processa pagamentos) ---
 router.post('/webhook', async (req, res) => {
     try {
         const { type, data } = req.body;
-        const id = data?.id || req.query.id; 
+        const id = data?.id || req.query.id;
 
-        if (id && (type === 'payment' || req.query.topic === 'payment')) {
+        console.log(`\n📩 Webhook recebido - Tipo: ${type}, ID: ${id}`);
+
+        if (type === 'payment' || req.query.topic === 'payment') {
+            if (!id) return res.status(200).send("OK");
+
             const paymentInfo = await payment.get({ id: String(id) });
             
             if (paymentInfo.status === 'approved') {
                 const storeId = paymentInfo.external_reference;
                 const amount = paymentInfo.transaction_amount || 0;
-                
-                // Se pagou mais de 100 reais, assume anual
-                const daysToAdd = amount > 100 ? 365 : 30; 
 
-                const newExpiryDate = new Date();
-                newExpiryDate.setDate(newExpiryDate.getDate() + daysToAdd);
+                console.log(`✅ Pagamento aprovado`);
+                console.log(`   Loja: ${storeId}`);
+                console.log(`   Valor: R$ ${amount}`);
 
-                if (storeId) {
+                const store = await prisma.store.findUnique({ where: { id: storeId } });
+
+                if (store) {
+                    // Ativa assinatura
+                    const expiryDate = new Date();
+                    expiryDate.setDate(expiryDate.getDate() + 30); // Plus 30 dias
+
                     await prisma.store.update({
                         where: { id: storeId },
-                        data: { 
-                            plan: 'PRO',
-                            subscriptionExpiresAt: newExpiryDate 
+                        data: {
+                            isSubscribed: true,
+                            subscriptionExpiresAt: expiryDate
                         }
                     });
+
+                    console.log(`✅ Assinatura ativada até: ${expiryDate.toLocaleDateString('pt-BR')}`);
                 }
             }
         }
+
         return res.status(200).send("OK");
     } catch (error) {
-        console.error("Erro no Webhook:", error);
+        console.error("❌ Erro no Webhook:", error);
         return res.status(500).send();
     }
 });

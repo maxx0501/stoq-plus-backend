@@ -39,6 +39,7 @@ router.post('/create-checkout', async (req, res) => {
         const preferenceData = {
             items: [
                 {
+                    id: 'stoq-premium',
                     title: `Stoq+ Premium - Assinatura Mensal`,
                     description: description,
                     unit_price: firstPrice,

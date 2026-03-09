@@ -147,7 +147,7 @@ router.post('/login', async (req, res) => {
         const userRole = storeLink ? storeLink.role : 'USER';
         
         const token = jwt.sign(
-            { userId: user.id, role: userRole, storeId: storeLink?.storeId }, 
+            { userId: user.id, role: userRole, isSuperAdmin: user.isSuperAdmin, storeId: storeLink?.storeId }, 
             JWT_SECRET, 
             { expiresIn: '7d' }
         );
@@ -170,34 +170,6 @@ router.post('/login', async (req, res) => {
         }
         console.error('Login error:', error);
         return res.status(500).json({ error: "Erro no login." });
-    }
-});
-
-// --- 5. ALTERAR SENHA ---
-router.put('/change-password', authMiddleware, async (req, res) => {
-    try {
-        // ✅ VALIDAR ENTRADA
-        const validated = ChangePasswordSchema.parse(req.body);
-        const { newPassword } = validated;
-        const userId = (req as any).user?.userId;
-        
-        if (!userId) return res.status(401).json({ error: "Não autorizado." });
-
-        const hash = await bcrypt.hash(newPassword, 10);
-        await prisma.user.update({ 
-            where: { id: userId }, 
-            data: { 
-                passwordHash: hash,
-                mustChangePassword: false // Libera acesso após trocar a senha
-            }
-        });
-        return res.json({ message: "Senha alterada com sucesso!" });
-    } catch (error: any) {
-        if (error.name === 'ZodError') {
-            return res.status(400).json({ error: error.errors[0]?.message });
-        }
-        console.error('Change password error:', error);
-        return res.status(500).json({ error: "Erro ao trocar senha." });
     }
 });
 
@@ -278,7 +250,7 @@ router.get('/google/callback', async (req, res) => {
         const userRole = storeLink ? storeLink.role : 'USER';
         
         const token = jwt.sign(
-            { userId: user.id, role: userRole, storeId: storeLink?.storeId }, 
+            { userId: user.id, role: userRole, isSuperAdmin: user.isSuperAdmin, storeId: storeLink?.storeId }, 
             JWT_SECRET!, 
             { expiresIn: '7d' }
         );
@@ -328,6 +300,279 @@ router.get('/me', async (req, res) => {
 
     } catch (err) {
         return res.status(401).json({ error: 'Token inválido' });
+    }
+});
+
+// --- 10. ESQUECI MINHA SENHA (FORGOT PASSWORD) ---
+router.post('/forgot-password', async (req, res) => {
+    try {
+        const { email } = req.body;
+        
+        if (!email) {
+            return res.status(400).json({ error: "E-mail é obrigatório." });
+        }
+
+        const user = await prisma.user.findUnique({ where: { email } });
+        
+        if (!user) {
+            // 🔒 Não revelar se o usuário existe ou não (segurança)
+            return res.status(200).json({ message: "Se o e-mail existe em nossos registros, você receberá um link para redefinir sua senha." });
+        }
+
+        // 🔐 Gerar token de recuperação com validade de 1 hora
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                resetPasswordToken: resetTokenHash,
+                resetPasswordExpires: expiresAt
+            }
+        });
+
+        // 📧 Enviar e-mail com link de recuperação
+        await mailService.sendPasswordResetEmail(email, resetToken);
+
+        return res.status(200).json({ message: "E-mail de recuperação enviado." });
+    } catch (error: any) {
+        console.error('Forgot password error:', error);
+        return res.status(500).json({ error: "Erro ao processar recuperação de senha." });
+    }
+});
+
+// --- 11. VALIDAR TOKEN DE RECUPERAÇÃO ---
+router.get('/reset-password/:token', async (req, res) => {
+    try {
+        const { token } = req.params;
+        const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+        const user = await prisma.user.findFirst({
+            where: {
+                resetPasswordToken: resetTokenHash,
+                resetPasswordExpires: {
+                    gt: new Date() // Token ainda válido?
+                }
+            }
+        });
+
+        if (!user) {
+            return res.status(400).json({ error: "Token inválido ou expirado." });
+        }
+
+        return res.status(200).json({ 
+            message: "Token válido. Você pode redefinir sua senha.",
+            email: user.email
+        });
+    } catch (error: any) {
+        console.error('Reset password validation error:', error);
+        return res.status(500).json({ error: "Erro ao validar token." });
+    }
+});
+
+// --- 12. REDEFINIR SENHA (RESET PASSWORD) ---
+router.post('/reset-password', async (req, res) => {
+    try {
+        const { token, newPassword } = req.body;
+
+        if (!token || !newPassword) {
+            return res.status(400).json({ error: "Token e nova senha são obrigatórios." });
+        }
+
+        const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+        const user = await prisma.user.findFirst({
+            where: {
+                resetPasswordToken: resetTokenHash,
+                resetPasswordExpires: {
+                    gt: new Date() // Token ainda válido?
+                }
+            }
+        });
+
+        if (!user) {
+            return res.status(400).json({ error: "Token inválido ou expirado." });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({ error: "A senha deve ter no mínimo 6 caracteres." });
+        }
+
+        // 🔐 Hash da nova senha
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                passwordHash: hashedPassword,
+                resetPasswordToken: null,
+                resetPasswordExpires: null
+            }
+        });
+
+        return res.status(200).json({ message: "Senha redefinida com sucesso. Faça login com sua nova senha." });
+    } catch (error: any) {
+        console.error('Reset password error:', error);
+        return res.status(500).json({ error: "Erro ao redefinir senha." });
+    }
+});
+
+// Função para gerar senha temporária forte
+function generateTemporaryPassword(): string {
+    const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const lower = 'abcdefghijklmnopqrstuvwxyz';
+    const numbers = '0123456789';
+    const symbols = '!@#$%^&*';
+    
+    let password = '';
+    password += upper[Math.floor(Math.random() * upper.length)];
+    password += lower[Math.floor(Math.random() * lower.length)];
+    password += numbers[Math.floor(Math.random() * numbers.length)];
+    password += symbols[Math.floor(Math.random() * symbols.length)];
+    
+    const all = upper + lower + numbers + symbols;
+    for (let i = 0; i < 6; i++) {
+        password += all[Math.floor(Math.random() * all.length)];
+    }
+    
+    return password.split('').sort(() => 0.5 - Math.random()).join('');
+}
+
+// --- CHANGE OWN PASSWORD (Qualquer usuário logado) ---
+router.put('/change-password', authMiddleware, async (req, res) => {
+    try {
+        const currentUser = (req as any).user;
+        const { currentPassword, newPassword } = req.body;
+
+        // 🔍 DEBUG
+        console.log('🔐 Change Password Request:', { userId: currentUser.userId, email: currentUser.email });
+
+        // ✅ Validar entrada
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ error: "Forneça senha atual e nova senha." });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({ error: "A nova senha deve ter no mínimo 6 caracteres." });
+        }
+
+        // ✅ Buscar usuário
+        const user = await prisma.user.findUnique({ where: { id: currentUser.userId } });
+        if (!user) {
+            console.error('❌ Usuário não encontrado para ID:', currentUser.userId);
+            return res.status(404).json({ error: "Usuário não encontrado." });
+        }
+
+        // ✅ Verificar senha atual
+        const validPassword = await bcrypt.compare(currentPassword, user.passwordHash);
+        if (!validPassword) {
+            return res.status(400).json({ error: "Senha atual incorreta." });
+        }
+
+        // ✅ Hash da nova senha
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        // ✅ Atualizar senha
+        await prisma.user.update({
+            where: { id: currentUser.userId },
+            data: { passwordHash: hashedPassword, mustChangePassword: false }
+        });
+
+        return res.status(200).json({ message: "Senha alterada com sucesso." });
+    } catch (error: any) {
+        console.error('Change password error:', error);
+        return res.status(500).json({ error: "Erro ao alterar senha." });
+    }
+});
+
+// --- ADMIN RESET PASSWORD (Super Admin ou OWNER da loja)---
+router.put('/admin-reset-password/:storeUserId', authMiddleware, async (req, res) => {
+    try {
+        // ✅ Super Admin ou OWNER da loja podem redefinir senhas
+        const currentUser = (req as any).user;
+        
+        if (!currentUser || (!currentUser.isSuperAdmin && currentUser.role !== 'OWNER')) {
+            return res.status(403).json({ error: "Apenas Super Admin ou proprietário da loja podem redefinir senhas." });
+        }
+
+        const storeUserId = String(req.params.storeUserId);
+        const { newPassword } = req.body;
+
+        // ✅ Validar nova senha
+        if (!newPassword || newPassword.length < 6) {
+            return res.status(400).json({ error: "A senha deve ter no mínimo 6 caracteres." });
+        }
+
+        // ✅ Buscar o StoreUser para pegar o userId
+        const storeUser = await prisma.storeUser.findUnique({ 
+            where: { id: storeUserId },
+            include: { user: true }
+        });
+        
+        if (!storeUser) {
+            return res.status(404).json({ error: "Membro não encontrado." });
+        }
+
+        // ✅ Hash da nova senha
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        // ✅ Atualizar usuário com nova senha e marcar para mudar na próxima vez
+        const updatedUser = await prisma.user.update({
+            where: { id: storeUser.userId },
+            data: {
+                passwordHash: hashedPassword,
+                mustChangePassword: true,
+                resetPasswordToken: null,
+                resetPasswordExpires: null
+            }
+        });
+
+        return res.status(200).json({ 
+            message: "Senha alterada. O usuário deve mudar sua senha no próximo login.",
+            user: { id: updatedUser.id, name: updatedUser.name, email: updatedUser.email }
+        });
+    } catch (error: any) {
+        console.error('Admin reset password error:', error);
+        return res.status(500).json({ error: "Erro ao redefinir senha do usuário." });
+    }
+});
+
+// --- FORÇAR MUDANÇA DE SENHA (Quando mustChangePassword é true)---
+router.put('/force-change-password', authMiddleware, async (req, res) => {
+    try {
+        const currentUser = (req as any).user;
+        const { newPassword } = req.body;
+
+        // ✅ Validar entrada
+        if (!newPassword || newPassword.length < 6) {
+            return res.status(400).json({ error: "A nova senha deve ter no mínimo 6 caracteres." });
+        }
+
+        // ✅ Buscar usuário
+        const user = await prisma.user.findUnique({ where: { id: currentUser.userId } });
+        if (!user) {
+            return res.status(404).json({ error: "Usuário não encontrado." });
+        }
+
+        // ✅ Verificar se realmente precisa mudar (segurança)
+        if (!user.mustChangePassword) {
+            return res.status(403).json({ error: "Mudança de senha não é obrigatória." });
+        }
+
+        // ✅ Hash da nova senha
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        // ✅ Atualizar senha e liberar acesso
+        await prisma.user.update({
+            where: { id: currentUser.userId },
+            data: { passwordHash: hashedPassword, mustChangePassword: false }
+        });
+
+        return res.status(200).json({ message: "Senha alterada com sucesso!" });
+    } catch (error: any) {
+        console.error('Force change password error:', error);
+        return res.status(500).json({ error: "Erro ao alterar senha." });
     }
 });
 

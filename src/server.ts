@@ -50,6 +50,7 @@ app.use(helmet({
 // 2. CORS - Restrito a origens conhecidas
 const allowedOrigins = [
     'http://localhost:5173',
+    'http://localhost:5174',
     'http://localhost:3000',
     'https://stoqplus.com.br',
     process.env.FRONTEND_URL

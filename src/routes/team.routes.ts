@@ -86,19 +86,37 @@ router.put('/member/:id', async (req, res) => {
     }
 });
 
-// Demitir - Remove apenas a relação StoreUser, não o usuário inteiro
+// Demitir - Remove a relação StoreUser e o User se não tiver outras lojas
 router.delete('/:id', async (req, res) => {
     const user = (req as any).user;
-    if (user.role !== 'OWNER') return res.status(403).json({error: "Apenas dono."});
+    // ✅ OWNER ou Super Admin pode deletar membros de equipe
+    if (!user.isSuperAdmin && user.role !== 'OWNER') {
+        return res.status(403).json({error: "Apenas proprietário ou Super Admin podem remover funcionários."});
+    }
     try {
         const membership = await prisma.storeUser.findUnique({ where: { id: req.params.id } });
         if (!membership) {
             return res.status(404).json({ error: "Membro não encontrado." });
         }
-        // Apenas remove a relação StoreUser, não deleta o usuário
+        
+        // Verificar se o usuário tem outras lojas
+        const otherStores = await prisma.storeUser.count({
+            where: { userId: membership.userId, NOT: { id: req.params.id } }
+        });
+        
+        // Deletar a relação StoreUser
         await prisma.storeUser.delete({ where: { id: req.params.id } });
-        return res.status(204).send();
-    } catch (e) { return res.status(500).json({ error: "Erro ao demitir." }); }
+        
+        // Se não tem outras lojas, deletar o usuário também
+        if (otherStores === 0) {
+            await prisma.user.delete({ where: { id: membership.userId } });
+        }
+        
+        return res.status(200).json({ message: "Funcionário removido com sucesso." });
+    } catch (e) { 
+        console.error('Delete team member error:', e);
+        return res.status(500).json({ error: "Erro ao demitir." }); 
+    }
 });
 
 export default router;

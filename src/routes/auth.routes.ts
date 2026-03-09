@@ -15,6 +15,8 @@ if (!JWT_SECRET) {
     throw new Error('❌ JWT_SECRET não definida em .env');
 }
 
+const SUPER_ADMIN_EMAILS = ['stoqplus@gmail.com'];
+
 // --- 1. CADASTRO ---
 router.post('/signup', async (req, res) => {
     try {
@@ -34,8 +36,10 @@ router.post('/signup', async (req, res) => {
         const hash = await bcrypt.hash(password, 10);
         const verificationToken = crypto.randomBytes(32).toString('hex');
 
+        const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
+
         await prisma.user.create({
-            data: { name, email, passwordHash: hash, isVerified: false, verificationToken }
+            data: { name, email, passwordHash: hash, isVerified: false, verificationToken, isSuperAdmin }
         });
 
         // ✅ CORREÇÃO: Usando await para o não cortar a execução em segundo plano
@@ -159,9 +163,9 @@ router.post('/login', async (req, res) => {
                 email: user.email, 
                 role: userRole, 
                 isSuperAdmin: user.isSuperAdmin,
-                plan: storeLink?.store?.plan || 'FREE',
+                plan: user.isSuperAdmin ? 'PRO' : (storeLink?.store?.plan || 'FREE'),
                 storeCreatedAt: storeLink?.store?.createdAt,
-                isSubscribed: storeLink?.store?.isSubscribed || false,
+                isSubscribed: user.isSuperAdmin ? true : (storeLink?.store?.isSubscribed || false),
                 mustChangePassword: user.mustChangePassword
             }, token, storeId: storeLink?.storeId 
         });
@@ -292,9 +296,9 @@ router.get('/me', async (req, res) => {
                 role: storeLink?.role || 'USER',
                 avatarUrl: user.avatarUrl,
                 isSuperAdmin: user.isSuperAdmin,
-                plan: store?.plan || 'FREE',
+                plan: user.isSuperAdmin ? 'PRO' : (store?.plan || 'FREE'),
                 storeCreatedAt: store?.createdAt,
-                isSubscribed: store?.isSubscribed || false,
+                isSubscribed: user.isSuperAdmin ? true : (store?.isSubscribed || false),
                 mustChangePassword: user.mustChangePassword
             },
             store: store ? { id: store.id, name: store.name } : null

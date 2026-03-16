@@ -72,7 +72,7 @@ router.get('/dashboard', async (req, res) => {
         });
     } catch (e: any) {
         console.error('Admin Dashboard Error:', e);
-        return res.status(500).json({ error: "Erro ao buscar dados do painel.", details: e.message });
+        return res.status(500).json({ error: "Erro ao buscar dados do painel." });
     }
 });
 

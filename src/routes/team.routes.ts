@@ -17,51 +17,59 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
     const user = (req as any).user;
     if (user.role === 'SELLER') return res.status(403).json({error: "Sem permissão"});
-    
+
     try {
-        // 1. Lendo TODAS as variáveis que o front envia, incluindo as permissões
         const { name, email, password, role, canSell, canManageProducts } = req.body;
 
-        // 2. Trava de segurança: Evita criar senha "123" que falha no login
+        // Validação de role
+        const validRoles = ['SELLER', 'MANAGER'] as const;
+        const assignedRole = role || 'SELLER';
+        if (!validRoles.includes(assignedRole)) {
+            return res.status(400).json({ error: "Role inválido. Use SELLER ou MANAGER." });
+        }
+
+        // Prevenção de escalação: Manager não pode criar Manager
+        if (user.role === 'MANAGER' && assignedRole === 'MANAGER') {
+            return res.status(403).json({ error: "Gerentes não podem criar outros gerentes." });
+        }
+
         if (!password || password.length < 8) {
             return res.status(400).json({ error: "A senha provisória deve ter no mínimo 8 caracteres." });
         }
 
-        // 3. Prevenção de quebra do servidor (Verifica se o email já existe)
         const existingUser = await prisma.user.findUnique({ where: { email } });
         if (existingUser) {
             return res.status(400).json({ error: "Este e-mail já está cadastrado no sistema." });
         }
 
         const hash = await bcrypt.hash(password, 10);
-        
+
         await prisma.$transaction(async (tx) => {
-            const newUser = await tx.user.create({ 
-                data: { 
-                    name, 
-                    email, 
+            const newUser = await tx.user.create({
+                data: {
+                    name,
+                    email,
                     passwordHash: hash,
-                    isVerified: true, // Já marca como verificado pois o dono criou
-                    mustChangePassword: true // Força usuário a mudar senha no primeiro login
-                } 
+                    isVerified: true,
+                    mustChangePassword: true
+                }
             });
-            
-            await tx.storeUser.create({ 
-                data: { 
-                    userId: newUser.id, 
-                    storeId: user.storeId, 
-                    role: role || 'SELLER',
-                    // 4. Salvando as permissões diretamente na criação!
+
+            await tx.storeUser.create({
+                data: {
+                    userId: newUser.id,
+                    storeId: user.storeId,
+                    role: assignedRole,
                     canSell: canSell !== undefined ? canSell : true,
                     canManageProducts: canManageProducts !== undefined ? canManageProducts : false
-                } 
+                }
             });
         });
-        
+
         return res.status(201).json({ message: "Criado." });
-    } catch (e) { 
+    } catch (e) {
         console.error("Erro ao criar membro da equipe:", e);
-        return res.status(500).json({ error: "Erro ao criar membro." }); 
+        return res.status(500).json({ error: "Erro ao criar membro." });
     }
 });
 
@@ -69,7 +77,18 @@ router.post('/', async (req, res) => {
 router.put('/member/:id', async (req, res) => {
     const user = (req as any).user;
     const { role, canSell, canManageProducts } = req.body;
-    
+
+    // Validação de role
+    if (role) {
+        const validRoles = ['SELLER', 'MANAGER'];
+        if (!validRoles.includes(role)) {
+            return res.status(400).json({ error: "Role inválido. Use SELLER ou MANAGER." });
+        }
+        if (user.role === 'MANAGER' && role === 'MANAGER') {
+            return res.status(403).json({ error: "Gerentes não podem promover a gerente." });
+        }
+    }
+
     try {
         const updated = await prisma.storeUser.updateMany({
             where: { id: req.params.id, storeId: user.storeId },

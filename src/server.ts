@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import path from 'path';
+import { authMiddleware, checkSubscription } from './middlewares/auth';
 
 // Importação das Rotas
 import authRoutes from './routes/auth.routes';
@@ -102,45 +103,41 @@ app.use('/auth/login', loginLimiter);
 app.use('/auth/signup', loginLimiter);
 
 // ===== ARQUIVO ESTÁTICO (UPLOADS) =====
-// Serve arquivos estáticos da pasta 'uploads' com CORS permitido
 app.use('/uploads', (req, res, next) => {
-    // Headers CORS para permitir acesso de qualquer origem
-    res.header('Access-Control-Allow-Origin', '*');
+    const origin = req.headers.origin;
+    if (origin && allowedOrigins.includes(origin)) {
+        res.header('Access-Control-Allow-Origin', origin);
+    }
     res.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.header('Vary', 'Origin');
     res.header('Cache-Control', 'public, max-age=3600');
-    
-    // Responde a requisições OPTIONS (CORS preflight)
+
     if (req.method === 'OPTIONS') {
         return res.sendStatus(200);
     }
     next();
-}, express.static(path.join(__dirname, '..', 'uploads'), {
-    setHeaders: (res) => {
-        res.set('Access-Control-Allow-Origin', '*');
-    }
-}));
+}, express.static(path.join(__dirname, '..', 'uploads')));
 // --- MAPA DE ROTAS ---
 
-app.use('/auth', authRoutes);   
-app.use('/products', productRoutes);
-app.use('/stock', productRoutes); 
-app.use('/sales', salesRoutes);
-app.use('/customers', customersRoutes);
+app.use('/auth', authRoutes);
 app.use('/payments', paymentRoutes);
-app.use('/team', teamRoutes);
-app.use('/sellers', teamRoutes);
-app.use('/cashflow', cashflowRoutes);
-app.use('/reports', reportsRoutes);
-app.use('/expenses', expensesRoutes);
 app.use('/stores', storeRoutes);
 app.use('/users', userRoutes);
 app.use('/admin', adminRoutes);
 
-// Rotas de Dashboard (Compatibilidade)
-app.use('/dashboard-metrics', dashboardRoutes); 
-app.use('/my-sales-metrics', statsRoutes);      
+// Rotas protegidas por assinatura (requer auth + subscription ativa)
+app.use('/products', authMiddleware, checkSubscription, productRoutes);
+app.use('/stock', authMiddleware, checkSubscription, productRoutes);
+app.use('/sales', authMiddleware, checkSubscription, salesRoutes);
+app.use('/customers', authMiddleware, checkSubscription, customersRoutes);
+app.use('/team', authMiddleware, checkSubscription, teamRoutes);
+app.use('/sellers', authMiddleware, checkSubscription, teamRoutes);
+app.use('/cashflow', authMiddleware, checkSubscription, cashflowRoutes);
+app.use('/reports', authMiddleware, checkSubscription, reportsRoutes);
+app.use('/expenses', authMiddleware, checkSubscription, expensesRoutes);
+app.use('/dashboard-metrics', authMiddleware, checkSubscription, dashboardRoutes);
+app.use('/my-sales-metrics', authMiddleware, checkSubscription, statsRoutes);      
 
 // Rota de Teste
 app.get('/', (req, res) => res.send('🚀 Stoq+ API Modular Rodando e Corrigida!'));
